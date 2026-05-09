@@ -1,0 +1,6 @@
+{
+    "name": "YourName",
+    "theme": "dark",
+    "groq_api_key": "YOUR_GROQ_API_KEY",
+    "gemini_api_key": "YOUR_GEMINI_API_KEY"
+}
