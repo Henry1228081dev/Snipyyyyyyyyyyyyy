@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snipy Minimalist UI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+    <style>
+        :root {
+            --bg-canvas: #FBFBFA;
+            --bg-surface: #FFFFFF;
+            --text-main: #111111;
+            --text-muted: #787774;
+            --border-light: #EAEAEA;
+            --glass-bg: rgba(255, 255, 255, 0.85);
+            --glass-border: rgba(0, 0, 0, 0.06);
+            --glass-blur: blur(24px);
+            --font-sans: 'Geist', 'SF Pro Display', -apple-system, sans-serif;
+            --font-mono: 'Geist Mono', monospace;
+            --progress-bg: rgba(0,0,0,0.1);
+        }
+
+        :root.dark-theme {
+            --bg-canvas: #111111;
+            --bg-surface: #1C1C1C;
+            --text-main: #FFFFFF;
+            --text-muted: #A0A0A0;
+            --border-light: #333333;
+            --glass-bg: rgba(28, 28, 28, 0.85);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --progress-bg: rgba(255,255,255,0.2);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+        body {
+            width: 100vw; height: 100vh; overflow: hidden;
+            font-family: var(--font-sans); color: var(--text-main);
+            background: transparent; user-select: none;
+        }
+
+        .snip-overlay {
+            position: absolute; inset: 0; background: rgba(0, 0, 0, 0.4);
+            z-index: 10; display: none; cursor: crosshair;
+        }
+        .snip-overlay.active { display: block; }
+        .snip-overlay.drawing { background: rgba(0, 0, 0, 0.2); }
+
+        .snip-region {
+            position: absolute; border-radius: 8px;
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+            z-index: 15; display: none; pointer-events: none;
+        }
+        .snip-region.active { display: block; }
+
+        .corner-bracket { position: absolute; width: 32px; height: 32px; border: 4px solid white; z-index: 20; }
+        .top-left { top: -2px; left: -2px; border-right: none; border-bottom: none; border-top-left-radius: 12px; }
+        .top-right { top: -2px; right: -2px; border-left: none; border-bottom: none; border-top-right-radius: 12px; }
+        .bottom-left { bottom: -2px; left: -2px; border-right: none; border-top: none; border-bottom-left-radius: 12px; }
+        .bottom-right { bottom: -2px; right: -2px; border-left: none; border-top: none; border-bottom-right-radius: 12px; }
+
+        .chat-bar {
+            position: absolute; width: 500px;
+            background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--glass-border); border-radius: 12px;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08); z-index: 30; display: none;
+            flex-direction: column; overflow: hidden; transform: translateY(12px); opacity: 0;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); pointer-events: auto;
+        }
+        .chat-bar.visible { display: flex; transform: translateY(0); opacity: 1; }
+
+        .input-row { display: flex; align-items: center; padding: 16px 20px; gap: 12px; }
+        .input-row i { color: var(--text-muted); font-size: 20px; }
+        .chat-input { flex: 1; border: none; background: transparent; font-family: var(--font-sans); font-size: 15px; color: var(--text-main); outline: none; }
+        .chat-input::placeholder { color: var(--text-muted); }
+        
+        .response-area { padding: 20px; font-size: 14px; line-height: 1.6; color: var(--text-main); display: none; user-select: text; border-top: 1px solid var(--border-light); }
+        .response-area.active { display: block; }
+        .action-footer { padding: 12px 20px; background: rgba(0,0,0,0.02); border-top: 1px solid var(--border-light); display: none; justify-content: space-between; align-items: center; }
+        .action-footer.active { display: flex; }
+        
+        .btn-minimal {
+            background: transparent; border: none; color: var(--text-muted); font-family: var(--font-sans); font-size: 12px;
+            text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: color 0.2s;
+        }
+        .btn-minimal:hover { color: var(--text-main); }
+
+        .timer-pill {
+            position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%) translateY(20px);
+            background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--glass-border); border-radius: 24px;
+            padding: 10px 20px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+            font-family: var(--font-sans); font-size: 14px; color: var(--text-main); z-index: 50;
+            display: none; opacity: 0; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); pointer-events: auto;
+            overflow: hidden;
+        }
+        .timer-pill.visible { display: flex; transform: translateX(-50%) translateY(0); opacity: 1; align-items: center; }
+        .timer-progress {
+            position: absolute; top: 0; left: 0; height: 100%; width: 100%;
+            background: var(--progress-bg); z-index: 1; transform-origin: left center;
+        }
+        .timer-pill kbd, .timer-pill span { position: relative; z-index: 2; }
+        .timer-pill kbd {
+            background: var(--bg-canvas); border: 1px solid var(--border-light);
+            border-radius: 4px; padding: 2px 6px; font-family: var(--font-mono); font-size: 12px; margin-right: 6px;
+        }
+
+        .side-panel {
+            position: absolute; top: 24px; right: 24px; width: 360px; height: calc(100vh - 48px);
+            background: var(--bg-surface); border: 1px solid var(--border-light); border-radius: 12px;
+            box-shadow: 0 12px 48px rgba(0, 0, 0, 0.1); z-index: 40; display: none;
+            flex-direction: column; transform: translateX(20px); opacity: 0; transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1); pointer-events: auto;
+            resize: horizontal; min-width: 300px; max-width: 800px; overflow: hidden;
+            direction: rtl; /* For resizing from left side */
+        }
+        .side-panel-inner {
+            display: flex; flex-direction: column; height: 100%; width: 100%; direction: ltr;
+        }
+        .side-panel.visible { display: flex; transform: translateX(0); opacity: 1; }
+        .panel-header { padding: 20px; border-bottom: 1px solid var(--border-light); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+        .panel-title { font-weight: 500; font-size: 14px; }
+        .panel-content { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 24px; user-select: text; }
+        .msg-user { align-self: flex-end; background: var(--bg-canvas); border: 1px solid var(--border-light); padding: 12px 16px; border-radius: 8px; font-size: 14px; max-width: 85%; word-break: break-word; }
+        .msg-ai { align-self: flex-start; font-size: 14px; line-height: 1.6; color: var(--text-main); word-break: break-word; }
+        .panel-input { padding: 16px 20px; border-top: 1px solid var(--border-light); background: var(--bg-canvas); flex-shrink: 0; display: flex; align-items: center; border-radius: 0 0 12px 12px; }
+        .panel-input input { flex: 1; border: none; background: transparent; font-family: var(--font-sans); font-size: 14px; outline: none; color: var(--text-main); }
+
+        .onboarding-overlay { position: absolute; inset: 0; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(8px); z-index: 100; display: flex; align-items: center; justify-content: center; pointer-events: auto; }
+        .dark-theme .onboarding-overlay { background: rgba(0, 0, 0, 0.9); }
+        .onboarding-card { width: 400px; background: var(--bg-surface); border: 1px solid var(--border-light); border-radius: 12px; padding: 40px; box-shadow: 0 8px 32px rgba(0,0,0,0.08); animation: fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .onboarding-card h2 { font-size: 20px; font-weight: 500; margin-bottom: 8px; }
+        .onboarding-card p { color: var(--text-muted); font-size: 14px; line-height: 1.5; margin-bottom: 24px; }
+        .input-group { margin-bottom: 16px; }
+        .input-group label { display: block; font-size: 12px; font-family: var(--font-mono); color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; }
+        .input-group input, .input-group select { width: 100%; padding: 12px; border: 1px solid var(--border-light); border-radius: 6px; background: var(--bg-canvas); font-family: var(--font-mono); font-size: 13px; outline: none; color: var(--text-main); }
+        .btn-primary { width: 100%; padding: 12px; background: var(--text-main); color: var(--bg-surface); border: 1px solid var(--border-light); border-radius: 6px; font-family: var(--font-sans); font-weight: 500; font-size: 14px; cursor: pointer; margin-top: 8px; transition: opacity 0.2s; }
+        .btn-primary:hover { opacity: 0.9; }
+
+        @keyframes fade-up { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    </style>
+</head>
+<body>
+
+    <div id="onboarding" class="onboarding-overlay" style="display:none;">
+        <div class="onboarding-card">
+            <h2>Welcome to Snipy</h2>
+            <p>Instant contextual intelligence. Configure your settings to begin.</p>
+            <div class="input-group">
+                <label>Name</label>
+                <input type="text" id="name-input" placeholder="Your name">
+            </div>
+            <div class="input-group">
+                <label>Theme</label>
+                <select id="theme-input" style="font-family: var(--font-sans);">
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label>GROQ_API_KEY</label>
+                <input type="password" id="groq-key-input" placeholder="gsk_...">
+            </div>
+            <button id="start-btn" class="btn-primary">Initialize Engine</button>
+        </div>
+    </div>
+
+    <div id="snip-overlay" class="snip-overlay"></div>
+    
+    <div id="snip-region" class="snip-region">
+        <div class="corner-bracket top-left"></div>
+        <div class="corner-bracket top-right"></div>
+        <div class="corner-bracket bottom-left"></div>
+        <div class="corner-bracket bottom-right"></div>
+    </div>
+
+    <div id="chat-bar" class="chat-bar">
+        <div class="input-row">
+            <i class="ph-bold ph-sparkle"></i>
+            <input type="text" id="chat-input" class="chat-input" placeholder="Ask about this area...">
+            <button id="add-snip-btn" class="btn-minimal" style="width: 24px; height: 24px; padding: 0; justify-content: center;" title="Add another image"><i class="ph-bold ph-plus"></i></button>
+            <button id="ask-btn" class="btn-minimal" style="width: 24px; height: 24px; padding: 0; justify-content: center;" title="Send"><i class="ph-bold ph-arrow-right"></i></button>
+            <button id="close-btn" class="btn-minimal" style="width: 24px; height: 24px; padding: 0; justify-content: center;" title="Close session"><i class="ph-bold ph-x"></i></button>
+        </div>
+        <div id="response-area" class="response-area"></div>
+        <div id="action-footer" class="action-footer">
+            <button id="btn-depth" class="btn-minimal">Go in more depth <i class="ph-bold ph-arrow-right"></i></button>
+        </div>
+    </div>
+
+    <div id="timer-pill" class="timer-pill">
+        <div id="timer-progress" class="timer-progress"></div>
+        <kbd>Esc</kbd> <span>to resume</span>
+    </div>
+
+    <div id="side-panel" class="side-panel" style="direction: rtl;">
+        <div class="side-panel-inner">
+            <div class="panel-header">
+                <div class="panel-title">Snipy Session</div>
+                <i class="ph-bold ph-x" style="cursor:pointer; color: var(--text-muted);" id="close-panel"></i>
+            </div>
+            <div id="panel-content" class="panel-content"></div>
+            <div class="panel-input">
+                <button id="panel-add-snip-btn" class="btn-minimal" style="width: 24px; height: 24px; padding: 0; justify-content: center; margin-right: 8px;" title="Add image"><i class="ph-bold ph-plus"></i></button>
+                <input type="text" id="panel-text-input" placeholder="Continue conversation...">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let pyBridge = null;
+
+        function updateClickableRegions() {
+            if (!pyBridge) return;
+            const onboarding = document.getElementById('onboarding');
+            if (onboarding && onboarding.style.display !== 'none') {
+                pyBridge.set_clickable_rects('full');
+                return;
+            }
+            if (document.getElementById('snip-overlay').classList.contains('active')) {
+                pyBridge.set_clickable_rects('full');
+                return;
+            }
+            
+            const rects = [];
+            const elements = [document.getElementById('chat-bar'), document.getElementById('side-panel'), document.getElementById('timer-pill')];
+            elements.forEach(el => {
+                if (el && (el.classList.contains('visible') || (el.style.display && el.style.display !== 'none'))) {
+                    const rect = el.getBoundingClientRect();
+                    if (rect.width > 0 && rect.height > 0) {
+                        rects.push({x: Math.round(rect.left), y: Math.round(rect.top), w: Math.round(rect.width), h: Math.round(rect.height)});
+                    }
+                }
+            });
+            pyBridge.set_clickable_rects(JSON.stringify(rects));
+        }
+
+        const observer = new MutationObserver(() => updateClickableRegions());
+        window.addEventListener('DOMContentLoaded', () => {
+            observer.observe(document.body, { attributes: true, subtree: true, attributeFilter: ['class', 'style'] });
+        });
+
+        // Called from main.py after bridge injection
+        window.onBridgeReady = function() {
+            pyBridge = window.pywebview.api;
+            pyBridge.request_config();
+        };
+
+        window.applyConfig = function(name, theme, hasKeys) {
+            if(theme === 'dark') document.documentElement.classList.add('dark-theme');
+            else document.documentElement.classList.remove('dark-theme');
+            
+            if (name) document.getElementById('name-input').value = name;
+            if (theme) document.getElementById('theme-input').value = theme;
+
+            if (hasKeys === true || hasKeys === 'true') {
+                document.getElementById('onboarding').style.display = 'none';
+                if(pyBridge) pyBridge.ready();
+            } else {
+                document.getElementById('onboarding').style.display = 'flex';
+                updateClickableRegions();
+            }
+        };
+
+        const themeSelect = document.getElementById('theme-input');
+        if (themeSelect) {
+            themeSelect.addEventListener('change', (e) => {
+                if (e.target.value === 'dark') {
+                    document.documentElement.classList.add('dark-theme');
+                } else {
+                    document.documentElement.classList.remove('dark-theme');
+                }
+                updateClickableRegions();
+            });
+        }
+
+        const overlay = document.getElementById('snip-overlay');
+        const region = document.getElementById('snip-region');
+        const chatBar = document.getElementById('chat-bar');
+        const chatInput = document.getElementById('chat-input');
+        const sidePanel = document.getElementById('side-panel');
+        const panelContent = document.getElementById('panel-content');
+        const timerPill = document.getElementById('timer-pill');
+        
+        let pillTimeout;
+
+        let isDrawing = false;
+        let startX, startY;
+        let snipContext = 'main';
+
+        window.startSnipMode = function() {
+            snipContext = 'main';
+            overlay.classList.add('active');
+            region.classList.remove('active');
+            chatBar.classList.remove('visible');
+            sidePanel.classList.remove('visible');
+            stopTimerPill();
+        };
+
+        overlay.addEventListener('mousedown', (e) => {
+            isDrawing = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            region.style.left = `${startX}px`;
+            region.style.top = `${startY}px`;
+            region.style.width = '0px';
+            region.style.height = '0px';
+            region.classList.add('active');
+            overlay.classList.add('drawing');
+            chatBar.classList.remove('visible');
+        });
+
+        overlay.addEventListener('mousemove', (e) => {
+            if (!isDrawing) return;
+            const currentX = e.clientX;
+            const currentY = e.clientY;
+            const w = Math.abs(currentX - startX);
+            const h = Math.abs(currentY - startY);
+            const l = Math.min(currentX, startX);
+            const t = Math.min(currentY, startY);
+            
+            region.style.left = `${l}px`;
+            region.style.top = `${t}px`;
+            region.style.width = `${w}px`;
+            region.style.height = `${h}px`;
+        });
+
+        overlay.addEventListener('mouseup', async (e) => {
+            if (!isDrawing) return;
+            isDrawing = false;
+            overlay.classList.remove('drawing');
+            
+            const w = parseInt(region.style.width) || 0;
+            const h = parseInt(region.style.height) || 0;
+            
+            if (w > 20 && h > 20) {
+                overlay.classList.remove('active'); 
+                const l = parseInt(region.style.left);
+                const t = parseInt(region.style.top);
+                
+                if (pyBridge) {
+                    await pyBridge.capture_region(l, t, w, h);
+                } else {
+                    window.onCaptureComplete(l, t, w, h);
+                }
+            } else {
+                region.classList.remove('active');
+                if(pyBridge) pyBridge.hide_all();
+            }
+        });
+
+        window.onCaptureComplete = function(x, y, w, h) {
+            if (snipContext === 'side') {
+                sidePanel.classList.add('visible');
+                document.getElementById('panel-text-input').focus();
+            } else {
+                showChatBar(x, y, w, h);
+            }
+        };
+
+        window.showChatBar = function(x, y, w, h) {
+            chatBar.classList.add('visible');
+            let barTop = y + h + 16;
+            if (barTop + 60 > window.innerHeight) barTop = y - 60 - 16; 
+            chatBar.style.left = `${x}px`;
+            chatBar.style.top = `${barTop}px`;
+            setTimeout(() => chatInput.focus(), 100);
+        };
+
+        window.onFocusLoss = function() {
+            if (chatBar.classList.contains('visible') && !sidePanel.classList.contains('visible')) {
+                chatBar.classList.remove('visible');
+                startTimerPill();
+            }
+        };
+
+        window.onFocusGained = function() {
+            stopTimerPill();
+        };
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                if (sidePanel.classList.contains('visible') && document.activeElement === document.getElementById('panel-text-input')) {
+                    sidePanel.classList.remove('visible');
+                    if (pyBridge) pyBridge.hide_all();
+                }
+                else if (timerPill.classList.contains('visible')) {
+                    stopTimerPill();
+                    chatBar.classList.add('visible');
+                } else {
+                    hideAll();
+                }
+            }
+        });
+
+        function hideAll() {
+            overlay.classList.remove('active');
+            region.classList.remove('active');
+            chatBar.classList.remove('visible');
+            sidePanel.classList.remove('visible');
+            stopTimerPill();
+            panelContent.innerHTML = '';
+            if(pyBridge) pyBridge.hide_all();
+        }
+
+        function startTimerPill() {
+            timerPill.classList.add('visible');
+            const progress = document.getElementById('timer-progress');
+            progress.style.transition = 'none';
+            progress.style.transform = 'scaleX(1)';
+            void progress.offsetWidth;
+            progress.style.transition = 'transform 5s linear';
+            progress.style.transform = 'scaleX(0)';
+            
+            clearTimeout(pillTimeout);
+            pillTimeout = setTimeout(() => {
+                hideAll();
+            }, 5000);
+        }
+
+        function stopTimerPill() {
+            clearTimeout(pillTimeout);
+            timerPill.classList.remove('visible');
+        }
+
+        const responseArea = document.getElementById('response-area');
+        const actionFooter = document.getElementById('action-footer');
+        
+        async function submitQuestion() {
+            const q = chatInput.value.trim();
+            if (!q) return;
+            stopTimerPill();
+            chatInput.value = '';
+            responseArea.classList.add('active');
+            responseArea.innerHTML = '<span style="color: var(--text-muted)">Thinking...</span>';
+            addPanelMessage(q, 'user');
+            
+            let ans = "Error connecting to backend.";
+            if(pyBridge) {
+                ans = await new Promise(resolve => pyBridge.ask(q, resolve));
+            }
+            ans = ans.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            
+            responseArea.innerHTML = ans;
+            actionFooter.classList.add('active');
+            
+            const div = document.createElement('div');
+            div.className = 'msg-ai';
+            div.style.color = 'var(--text-main)';
+            div.innerHTML = ans;
+            panelContent.appendChild(div);
+            
+            chatInput.focus();
+        }
+
+        document.getElementById('btn-depth').addEventListener('click', () => {
+            chatBar.classList.remove('visible');
+            sidePanel.classList.add('visible');
+            document.getElementById('panel-text-input').focus();
+        });
+
+        document.getElementById('ask-btn').addEventListener('click', submitQuestion);
+        chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') submitQuestion();
+        });
+        
+        document.getElementById('add-snip-btn').addEventListener('click', () => {
+            snipContext = 'main';
+            chatBar.classList.remove('visible');
+            overlay.classList.add('active');
+            region.classList.remove('active');
+        });
+
+        document.getElementById('panel-add-snip-btn').addEventListener('click', () => {
+            snipContext = 'side';
+            sidePanel.classList.remove('visible');
+            overlay.classList.add('active');
+            region.classList.remove('active');
+        });
+
+        document.getElementById('close-btn').addEventListener('click', () => hideAll());
+
+        document.getElementById('start-btn').addEventListener('click', () => {
+            const name = document.getElementById('name-input').value.trim();
+            const theme = document.getElementById('theme-input').value;
+            const groqKey = document.getElementById('groq-key-input').value.trim();
+            if (groqKey && pyBridge) {
+                pyBridge.save_config_data(name, theme, groqKey);
+                window.applyConfig(name, theme, true);
+            }
+        });
+
+        document.getElementById('close-panel').addEventListener('click', () => {
+            sidePanel.classList.remove('visible');
+            if (pyBridge && !chatBar.classList.contains('visible') && !timerPill.classList.contains('visible')) {
+                pyBridge.hide_all();
+            }
+        });
+
+        document.getElementById('panel-text-input').addEventListener('keydown', async (e) => {
+            if (e.key === 'Enter') {
+                const input = document.getElementById('panel-text-input');
+                const q = input.value.trim();
+                if(!q) return;
+                input.value = '';
+                addPanelMessage(q, 'user');
+                
+                const div = document.createElement('div');
+                div.className = 'msg-ai';
+                div.style.color = 'var(--text-muted)';
+                div.innerText = 'Thinking...';
+                panelContent.appendChild(div);
+                panelContent.scrollTop = panelContent.scrollHeight;
+                
+                if(pyBridge) {
+                    const ans = await new Promise(resolve => pyBridge.ask(q, resolve));
+                    div.style.color = 'var(--text-main)';
+                    div.innerHTML = ans.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                } else {
+                    div.innerText = "Error: Backend not connected.";
+                }
+                panelContent.scrollTop = panelContent.scrollHeight;
+            }
+        });
+
+        function addPanelMessage(text, role) {
+            const div = document.createElement('div');
+            div.className = role === 'user' ? 'msg-user' : 'msg-ai';
+            div.innerHTML = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            panelContent.appendChild(div);
+            panelContent.scrollTop = panelContent.scrollHeight;
+        }
+
+    </script>
+</body>
+</html>
